@@ -1,6 +1,20 @@
-# Migration of AdTech to Google DFP (now known as google admanager)
+# Migration of AdTech to Google DFP (now known as google admanager)  <!-- omit in toc --> 
 
 This migration was carried out in two parts. First was code changes in May 2018 followed by deployment in late August 2018. 
+
+## Contents <!-- omit in toc --> 
+- [Apps Affected](#apps-affected)
+    - [Github](#github)
+    - [Gitlab](#gitlab)
+    - [External](#external)
+    - [Service](#service)
+- [Implementation](#implementation)
+  - [Older Sites](#older-sites)
+  - [React Sites](#react-sites)
+- [Google AdManager Script](#google-admanager-script)
+  - [Define Ad Position](#define-ad-position)
+  - [Targeting](#targeting)
+  - [Size Mapping](#size-mapping)
 
 ## Apps Affected
 
@@ -29,6 +43,7 @@ The front end apps affected as part of this migration were:
 Also modified was the .NET Advertising Service API:
 * [Dnuk.API.Advertising](http://gitlab.internal.doctors.net.uk/Dnuk/Dnuk.API.Advertising)
 
+([Top](#contents))
 
 ## Implementation
 
@@ -50,17 +65,24 @@ The script returned from `Dnuk.API.Advertising` is partially dependant on the lo
 
 The react sites implement this script directly in the code. This allows a single request to be made to Google AdManager for all ads on the page instead of single requests for each ad placement on the page. To see the implementation on the m3.intl.dnuk-homepage-controller project it is between lines 219 and 294 [here](https://github.com/m3europe/m3.intl.dnuk-homepage-controller/blob/21fc1827f3d6a520e9bd796602f01408d6952971/src/app/containers/home-container/index.jsx#L219).
 
+([Top](#contents))
+
 ## Google AdManager Script
 
 Below is the script returned by the call above for older sites. For the react sites the script is very similar but is setup to request multiple ads instead of just one.
 
 ```JavaScript
+// define the size mapping for later use
 var sizeMapping = googletag.sizeMapping()
   .addSize([1410, 120], [[970, 90], [728, 90]])
   .addSize([992, 120], [728, 90])
   .addSize([0, 0], [320, 50])
   .build();
+
+// define the function to be passed to google
 googletag.cmd.push(function() {
+
+  // define an individual ad position
   googletag
     .defineSlot(
       '/21705339479/DNUK/forum-topleaderboard',
@@ -72,11 +94,37 @@ googletag.cmd.push(function() {
     .setTargeting('mg', [12373,24667,24950])
     .setTargeting('type', [2])
     .defineSizeMapping(sizeMapping)
-    .addService(googletag.pubads());
+    .addService(googletag.pubads()
+  );
+
+  // add extra general parameters
   googletag.pubads().collapseEmptyDivs();
+
+  // enable the google services
   googletag.enableServices();
+
+  // actually request the ad
   googletag.display('4516038');
 });
 ```
 
+### Define Ad Position
+
+The ad position is defined as a function in the googletag.cmd array. The function can take as many ad units as you need. The homepage passes all four ad units at once. The script from the .Net ad service returns a single ad position per script as it allows individual ad units to be called only when required.
+
+The ad position definition can be as simple as `googletag.defineSlot()`. The parameters this function takes define how google understand the ad position relative to its system and where on the page to put the requested ad unit. In this example the first parameter `/21705339479/DNUK/forum-topleaderboard` is made up of three parts that define the ad position in AdManager, the `21705339479` is the account number. In AdManager for ease of working with an integration environment and a live environment ad units are defined in a hierarchy. In this example the `DNUK` is for the live site, the alternative would be `DNUK-Test`. The final part is the ad unit name as defined in ad manager in this case `forum-topleaderboard`, note there are two ad units with this name, one defined under `DNUK` and one under `DNUK-Test`. The second parameter is the size of the ad units that can be accepted in this placement. Each placement is defined as a two part array of `[width, height]`, when multiple placement sizes can be accepted, as in this case then you have an array of these placement arrays. The final parameter is the `id` of the div on the page where the ad unit should be placed. In this case it is `4516038` which is a throw back to the AdTech implementation. You can see the div id being the same [above](#older-sites)
+
+### Targeting
+
 ### Size Mapping
+
+```JavaScript
+var sizeMapping = googletag.sizeMapping()
+  .addSize([1410, 120], [[970, 90], [728, 90]])
+  .addSize([992, 120], [728, 90])
+  .addSize([0, 0], [320, 50])
+  .build();
+```
+
+The first part of the script sets up the size mappings for later use. Each size has two components, the first is the minimum size for the mapping to apply and the second is the size of the ads to show for the given size of display. The first `.addSize` takes the queries against a viewport of greater than 1410px wide and 120px high. On a page that meets these conditions an ad of size 970px x 90px or an ad of 728px x 90px will be displayed. If either the height or the width are smaller than the given values then the next line will be evaluated: if the view port has a width greater than 992px and a height greater that 120px then an ad of 728px x 90px will be displayed. If bother of these queries fail the fall back at width greater than 0px and height greater than 0px is to display an ad of 320px x 50px.
+
